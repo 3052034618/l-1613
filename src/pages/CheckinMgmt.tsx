@@ -210,6 +210,64 @@ const CheckinMgmt: React.FC = () => {
               )}
             </div>
 
+            {/* 权益变更历史 */}
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/60">
+              <div className="flex items-center gap-1.5 mb-3">
+                <History className="w-4 h-4 text-indigo-500" />
+                <span className="text-sm font-semibold text-slate-700">权益变更历史</span>
+                <span className="ml-auto text-xs text-slate-400">共 {viewSubject.rightsHistory?.length || 0} 条记录</span>
+              </div>
+              {(!viewSubject.rightsHistory || viewSubject.rightsHistory.length === 0) ? (
+                <div className="text-center text-xs text-slate-400 py-4">暂无权益变更记录</div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {viewSubject.rightsHistory.slice().reverse().map((record, i) => (
+                    <div key={record.id || i} className="flex gap-3 p-2.5 bg-white rounded-lg border border-slate-100">
+                      <div className="flex flex-col items-center pt-0.5">
+                        <div className={`w-2.5 h-2.5 rounded-full ${
+                          record.type === 'suspend' ? 'bg-red-500'
+                            : record.type === 'restore_checkin' ? 'bg-emerald-500'
+                              : 'bg-blue-500'
+                        }`} />
+                        {i < (viewSubject.rightsHistory?.length || 0) - 1 && (
+                          <div className="w-px flex-1 bg-slate-200 mt-1" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`tag text-[10px] px-2 py-0.5 ${
+                            record.type === 'suspend' ? 'bg-red-100 text-red-700'
+                              : record.type === 'restore_checkin' ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {record.type === 'suspend' ? '暂停权益'
+                              : record.type === 'restore_checkin' ? '补报到恢复'
+                                : '手动解除限制'}
+                          </span>
+                          <span className="text-xs text-slate-500 tabular-nums">{formatDateTime(record.time)}</span>
+                        </div>
+                        {record.reason && (
+                          <div className="text-xs text-slate-600 mt-1"><span className="text-slate-400">原因：</span>{record.reason}</div>
+                        )}
+                        <div className="text-xs text-slate-600 mt-1 flex items-center gap-1.5 flex-wrap">
+                          <span className="text-slate-400">变更：</span>
+                          <span className={!record.before ? 'text-emerald-600' : 'text-red-600'}>{record.before ? '已暂停' : '正常'}</span>
+                          <span className="text-slate-300">→</span>
+                          <span className={!record.after ? 'text-emerald-600' : 'text-red-600'}>{record.after ? '已暂停' : '正常'}</span>
+                        </div>
+                        {record.operator && (
+                          <div className="text-xs text-slate-500 mt-1"><span className="text-slate-400">操作人：</span>{record.operator}</div>
+                        )}
+                        {record.result && (
+                          <div className="text-xs text-slate-500 mt-0.5"><span className="text-slate-400">结果：</span>{record.result}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <div className="flex items-center gap-1.5 mb-1">

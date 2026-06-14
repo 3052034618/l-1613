@@ -16,6 +16,8 @@ export interface Subject {
   gender: Gender;
   address: string;
   phone: string;
+  // 身份登记中录入的信息
+  identityCaseNumber: string;
   // 法律文书中录入的信息（用于比对）
   docName: string;
   docIdCard: string;
@@ -33,6 +35,7 @@ export interface Subject {
   rightsSuspended: boolean;
   rightsSuspendReason?: string;
   rightsSuspendTime?: string;
+  rightsHistory: RightsChangeRecord[];
   createdAt: string;
   district: string;
   policeStation: string;
@@ -54,6 +57,17 @@ export interface Subject {
   // 当前风险等级
   riskLevel: 'high' | 'medium' | 'low';
   alertHistoryCount: number;
+}
+
+export interface RightsChangeRecord {
+  id: string;
+  time: string;
+  type: 'suspend' | 'restore_checkin' | 'restore_manual';
+  reason: string;
+  operator: string;
+  result: string;
+  before: boolean;
+  after: boolean;
 }
 
 export interface ValidationError {

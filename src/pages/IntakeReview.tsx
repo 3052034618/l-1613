@@ -19,6 +19,7 @@ import { formatDateTime, classNames } from '@/utils';
 interface FormState {
   name: string;
   idCard: string;
+  identityCaseNumber: string;
   gender: Gender;
   address: string;
   phone: string;
@@ -38,6 +39,7 @@ interface FormState {
 const DEFAULT_FORM: FormState = {
   name: '',
   idCard: '',
+  identityCaseNumber: '',
   gender: '男',
   address: '',
   phone: '',
@@ -115,6 +117,9 @@ const IntakeReview: React.FC = () => {
         } else if (e.field === 'cross_idcard') {
           set.add('idCard');
           set.add('docIdCard');
+        } else if (e.field === 'cross_casenumber') {
+          set.add('identityCaseNumber');
+          set.add('docCaseNumber');
         }
       } else {
         set.add(e.field);
@@ -317,6 +322,10 @@ const IntakeReview: React.FC = () => {
                   <div>
                     <label className="label">身份证号（身份）<span className="text-red-500">*</span></label>
                     <input className={inputCls('idCard')} value={form.idCard} onChange={e => updateField('idCard', e.target.value)} placeholder="18位身份证号" maxLength={18} />
+                  </div>
+                  <div>
+                    <label className="label">案号（身份登记）</label>
+                    <input className={inputCls('identityCaseNumber')} value={form.identityCaseNumber} onChange={e => updateField('identityCaseNumber', e.target.value)} placeholder="如 (2025)京01刑初1234号" />
                   </div>
                   <div>
                     <label className="label">联系电话<span className="text-red-500">*</span></label>
@@ -553,6 +562,7 @@ const IntakeReview: React.FC = () => {
                   <div><span className="text-xs text-slate-500">姓名：</span><b className="text-slate-800">{viewSubject.name}</b></div>
                   <div><span className="text-xs text-slate-500">性别：</span><b className="text-slate-800">{viewSubject.gender}</b></div>
                   <div className="col-span-2"><span className="text-xs text-slate-500">身份证号：</span><b className="text-slate-800 tabular-nums">{viewSubject.idCard}</b></div>
+                  <div className="col-span-2"><span className="text-xs text-slate-500">案号（身份登记）：</span><b className="text-slate-800">{viewSubject.identityCaseNumber || '—'}</b></div>
                   <div><span className="text-xs text-slate-500">联系电话：</span><b className="text-slate-800 tabular-nums">{viewSubject.phone}</b></div>
                   <div><span className="text-xs text-slate-500">家属：</span><b className="text-slate-800">{viewSubject.familyName} / {viewSubject.familyPhone}</b></div>
                   <div className="col-span-2"><span className="text-xs text-slate-500">居住地址：</span><b className="text-slate-800">{viewSubject.address}</b></div>
@@ -604,6 +614,7 @@ const IntakeReview: React.FC = () => {
                         {[
                           { label: '姓名比对', identity: viewSubject.name, legal: viewSubject.docName },
                           { label: '身份证号比对', identity: viewSubject.idCard, legal: viewSubject.docIdCard },
+                          { label: '案号比对', identity: viewSubject.identityCaseNumber || '—', legal: viewSubject.docCaseNumber || '—' },
                         ].map((item, i) => (
                           <div key={i} className="rounded-lg border border-emerald-100 overflow-hidden">
                             <div className="bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 flex items-center gap-1 border-b border-emerald-100">
@@ -633,8 +644,9 @@ const IntakeReview: React.FC = () => {
                         viewSubject.crossCheckErrors.map((errMsg, i) => {
                           const isName = errMsg.includes('姓名');
                           const isIdCard = errMsg.includes('身份证');
-                          const identityVal = isName ? viewSubject.name : isIdCard ? viewSubject.idCard : '';
-                          const legalVal = isName ? viewSubject.docName : isIdCard ? viewSubject.docIdCard : '';
+                          const isCaseNumber = errMsg.includes('案号');
+                          const identityVal = isName ? viewSubject.name : isIdCard ? viewSubject.idCard : isCaseNumber ? viewSubject.identityCaseNumber || '—' : '';
+                          const legalVal = isName ? viewSubject.docName : isIdCard ? viewSubject.docIdCard : isCaseNumber ? viewSubject.docCaseNumber || '—' : '';
                           return (
                             <div key={i} className="rounded-lg border border-violet-100 overflow-hidden">
                               <div className="bg-violet-50 px-2 py-1 text-[11px] font-medium text-violet-700 flex items-center gap-1 border-b border-violet-100">

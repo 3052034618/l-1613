@@ -64,6 +64,21 @@ export const generateMockSubjects = (): Subject[] => {
     const caseNumber = `（${randInt(2023, 2025)}）京${pick(['01', '02', '03', '04'])}刑初${randInt(100, 9999)}号`;
     const alertHistory = randInt(0, 15);
     const riskLevel: Subject['riskLevel'] = alertHistory > 8 ? 'high' : alertHistory > 3 ? 'medium' : 'low';
+    const rightsSuspended = Math.random() > 0.85;
+    const rightsHistory: Subject['rightsHistory'] = [];
+    if (rightsSuspended) {
+      const suspendTime = generateDateTime(randInt(60, 5000));
+      rightsHistory.push({
+        id: `RH${i}001`,
+        time: suspendTime,
+        type: 'suspend',
+        reason: '多次逾期未报到，经催告仍未履行报到义务',
+        operator: pick(['李警官', '王警官', '张主任']),
+        result: '权益已暂停（外出请假、活动范围限制、重点关注）',
+        before: false,
+        after: true,
+      });
+    }
     subjects.push({
       id: `SUB${String(i + 1).padStart(4, '0')}`,
       name,
@@ -71,10 +86,10 @@ export const generateMockSubjects = (): Subject[] => {
       gender: Math.random() > 0.35 ? '男' : '女',
       address: `${district}${pick(['XX街道', 'XX路', 'XX胡同'])}${randInt(1, 200)}号`,
       phone: generatePhone(),
-      // 文书录入字段（90%概率一致，10%概率故意不一致用于演示）
+      identityCaseNumber: Math.random() > 0.1 ? caseNumber : `（${randInt(2023, 2025)}）京${pick(['01', '02', '03'])}刑初${randInt(100, 9999)}号`,
       docName: Math.random() > 0.1 ? name : pick(SURNAMES) + pick(GIVEN_NAMES),
       docIdCard: Math.random() > 0.1 ? idCard : generateIdCard(),
-      docCaseNumber: Math.random() > 0.1 ? caseNumber : `（${randInt(2023, 2025)}）京${pick(['01', '02'])}刑初${randInt(100, 9999)}号`,
+      docCaseNumber: caseNumber,
       crossCheckPassed: true,
       crossCheckErrors: [],
       caseNumber,
@@ -84,9 +99,10 @@ export const generateMockSubjects = (): Subject[] => {
       correctionType: pick(CORRECTION_TYPES),
       status: i < 17 ? 'active' : i < 19 ? 'pending' : 'released',
       locationPermission: pick(['normal', 'normal', 'normal', 'normal', 'expanded', 'restricted'] as const),
-      rightsSuspended: Math.random() > 0.85,
-      rightsSuspendReason: Math.random() > 0.85 ? '多次逾期未报到' : undefined,
-      rightsSuspendTime: Math.random() > 0.85 ? generateDateTime(randInt(60, 5000)) : undefined,
+      rightsSuspended,
+      rightsSuspendReason: rightsSuspended ? '多次逾期未报到' : undefined,
+      rightsSuspendTime: rightsSuspended ? rightsHistory[0].time : undefined,
+      rightsHistory,
       createdAt: generateDateTime(randInt(1000, 50000)),
       district,
       policeStation: station,

@@ -58,13 +58,16 @@ interface AppState {
   resolveAlert: (alertId: string, operator: string, finalResult: string) => void;
   suspendRights: (subjectId: string, reason: string) => void;
   restoreRights: (subjectId: string, reason: string) => void;
+  _appendRightsHistory: (subjectId: string, record: import('@/types').RightsChangeRecord) => void;
   checkIn: (subjectId: string, recordId: string) => void;
   completeStudy: (planId: string, score: number) => void;
   createSupplementaryStudy: (planId: string) => void;
   addExportRecord: (record: Omit<ExportRecord, 'id' | 'exportedAt'>) => void;
   exportSubjectsToCSV: (filters?: { district?: string; status?: string; name?: string }) => string;
-  exportReleaseToCSV: (startDate: string, endDate: string, district?: string, name?: string) => string;
+  exportReleaseToCSV: (startDate: string, endDate: string, district?: string, keyword?: string) => string;
+  exportReleaseListCSV: (list: Subject[], filters: Record<string, string>, filterDisplay: string) => string;
   exportReportsToCSV: (date?: string, district?: string) => string;
+  exportDailyReportsCSV: (rows: DailyReport[], filters: Record<string, string>, filterDisplay: string) => string;
   resetAll: () => void;
 }
 
@@ -95,6 +98,7 @@ export const useAppStore = create<AppState>()(
         const identityFields: { key: keyof Subject; label: string }[] = [
           { key: 'name', label: '姓名（身份）' },
           { key: 'idCard', label: '身份证号（身份）' },
+          { key: 'identityCaseNumber', label: '案号（身份登记）' },
           { key: 'gender', label: '性别' },
           { key: 'address', label: '住址' },
           { key: 'phone', label: '联系电话' },
@@ -165,7 +169,17 @@ export const useAppStore = create<AppState>()(
             legalValue: data.docIdCard,
           });
         }
-        // 跨源比对 - 案号（文书中的docCaseNumber与文书录入的caseNumber最终统一以docCaseNumber为准）
+        // 跨源比对 - 案号
+        if (data.identityCaseNumber && data.docCaseNumber && data.identityCaseNumber !== data.docCaseNumber) {
+          errors.push({
+            field: 'cross_casenumber',
+            label: '案号比对',
+            type: 'cross_check',
+            message: `案号不一致`,
+            identityValue: data.identityCaseNumber,
+            legalValue: data.docCaseNumber,
+          });
+        }
         return errors;
       },
 
@@ -186,6 +200,7 @@ export const useAppStore = create<AppState>()(
           gender: data.gender!,
           address: data.address!,
           phone: data.phone!,
+          identityCaseNumber: data.identityCaseNumber!,
           docName: data.docName!,
           docIdCard: data.docIdCard!,
           docCaseNumber: data.docCaseNumber!,
@@ -199,6 +214,7 @@ export const useAppStore = create<AppState>()(
           status: 'active',
           locationPermission: 'normal',
           rightsSuspended: false,
+          rightsHistory: [],
           createdAt: now,
           district,
           policeStation: data.policeStation!,
@@ -459,27 +475,70 @@ export const useAppStore = create<AppState>()(
         });
       },
 
+      _appendRightsHistory: (subjectId, record) => {
+        set({
+          subjects: get().subjects.map(s =>
+            s.id === subjectId ? { ...s, rightsHistory: [record, ...s.rightsHistory] } : s
+          ),
+        });
+      },
+
       suspendRights: (subjectId, reason) => {
         const now = new Date().toISOString();
+        const subject = get().subjects.find(s => s.id === subjectId);
+        if (!subject || subject.rightsSuspended) return;
         get().updateSubject(subjectId, { rightsSuspended: true, rightsSuspendReason: reason, rightsSuspendTime: now });
+        get()._appendRightsHistory(subjectId, {
+          id: genId('RH'),
+          time: now,
+          type: 'suspend',
+          reason,
+          operator: get().currentOperator,
+          result: '权益已暂停（限制外出请假、缩小活动范围、纳入重点关注）',
+          before: false,
+          after: true,
+        });
       },
 
       restoreRights: (subjectId, reason) => {
+        const now = new Date().toISOString();
+        const subject = get().subjects.find(s => s.id === subjectId);
+        if (!subject || !subject.rightsSuspended) return;
         get().updateSubject(subjectId, { rightsSuspended: false, rightsSuspendReason: undefined, rightsSuspendTime: undefined });
+        get()._appendRightsHistory(subjectId, {
+          id: genId('RH'),
+          time: now,
+          type: 'restore_manual',
+          reason,
+          operator: get().currentOperator,
+          result: '权益已恢复正常',
+          before: true,
+          after: false,
+        });
       },
 
       checkIn: (subjectId, recordId) => {
         const now = new Date().toISOString();
         const today = todayStr();
         const subject = get().subjects.find(s => s.id === subjectId);
-        if (subject?.rightsSuspended) {
-          get().restoreRights(subjectId, '完成补报到，解除权益限制');
-        }
         set({
           checkins: get().checkins.map(c =>
-            c.id === recordId ? { ...c, status: 'completed', actualDate: today } : c
+            c.id === recordId ? { ...c, status: 'completed', actualDate: today, rightsChangeNote: '' } : c
           ),
         });
+        if (subject?.rightsSuspended) {
+          get().updateSubject(subjectId, { rightsSuspended: false, rightsSuspendReason: undefined, rightsSuspendTime: undefined });
+          get()._appendRightsHistory(subjectId, {
+            id: genId('RH'),
+            time: now,
+            type: 'restore_checkin',
+            reason: '完成补报到，已履行报到义务',
+            operator: get().currentOperator,
+            result: '权益已恢复正常',
+            before: true,
+            after: false,
+          });
+        }
       },
 
       completeStudy: (planId, score) => {
@@ -530,25 +589,29 @@ export const useAppStore = create<AppState>()(
         return fileName;
       },
 
-      exportReleaseToCSV: (startDate, endDate, district, name) => {
+      exportReleaseToCSV: (startDate, endDate, district, keyword) => {
         let list = get().subjects.filter(s => s.sentenceEnd >= startDate && s.sentenceEnd <= endDate);
         const f: Record<string, string> = { '开始日期': startDate, '结束日期': endDate };
         if (district) { list = list.filter(s => s.district === district); f['区县'] = district; }
-        if (name) { list = list.filter(s => s.name.includes(name)); f['姓名'] = name; }
+        if (keyword) {
+          list = list.filter(s => s.name.includes(keyword) || s.idCard.includes(keyword));
+          f['关键词'] = keyword;
+        }
         list = list.sort((a, b) => a.sentenceEnd.localeCompare(b.sentenceEnd));
+        return get().exportReleaseListCSV(list, f, Object.entries(f).map(([k, v]) => `${k}=${v}`).join('，'));
+      },
+
+      exportReleaseListCSV: (list, filters, filterDisplay) => {
         const headers = ['对象编号', '姓名', '身份证号', '罪名', '矫正类型', '区县', '司法所', '入矫日期', '解矫日期', '剩余天数', '综合建议'];
         const rows = list.map(s => {
           const remain = Math.ceil((new Date(s.sentenceEnd).getTime() - Date.now()) / 86400000);
           const suggestion = remain <= 7 ? '尽快组织解矫评估' : remain <= 30 ? '按计划准备评估材料' : '持续监管';
           return [s.id, s.name, s.idCard, s.charge, s.correctionType, s.district, s.policeStation, s.sentenceStart, s.sentenceEnd, String(remain), suggestion];
         });
-        let csvContent = headers.join(',') + '\n';
-        rows.forEach(r => { csvContent += r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',') + '\n'; });
         const dateStr = todayStr().replace(/-/g, '');
         const fileName = `解矫名单_${dateStr}_${rows.length}条`;
-        const filterDisplay = Object.entries(f).map(([k, v]) => `${k}=${v}`).join('，');
-        downloadCSV(csvContent, fileName);
-        get().addExportRecord({ type: 'release_list', typeName: TYPE_NAMES['release_list'], filters: f, filterDisplay, fileName: fileName + '.csv', recordCount: rows.length, operator: get().currentOperator });
+        downloadCSV(fileName, headers, rows);
+        get().addExportRecord({ type: 'release_list', typeName: TYPE_NAMES['release_list'], filters, filterDisplay, fileName: fileName + '.csv', recordCount: rows.length, operator: get().currentOperator });
         return fileName;
       },
 
@@ -557,19 +620,21 @@ export const useAppStore = create<AppState>()(
         const f: Record<string, string> = {};
         if (date) { list = list.filter(r => r.date === date); f['日期'] = date; }
         if (district) { list = list.filter(r => r.district === district); f['区县'] = district; }
+        const filterDisplay = Object.entries(f).map(([k, v]) => `${k}=${v}`).join('，') || '近7日全部';
+        return get().exportDailyReportsCSV(list, f, filterDisplay);
+      },
+
+      exportDailyReportsCSV: (rows, filters, filterDisplay) => {
         const headers = ['日期', '区县', '在矫人数', '违规率%', '教育完成率%', '逾期报到数', '预警数', '状态评估'];
-        const rows = list.map(r => {
+        const data = rows.map(r => {
           const score = r.violationRate + r.overdueCheckinCount * 0.5 + r.alertCount;
           const assess = score < 2 ? '良好' : score < 4 ? '一般' : '重点关注';
           return [r.date, r.district, r.activeCount, r.violationRate, r.studyCompletionRate, r.overdueCheckinCount, r.alertCount, assess];
         });
-        let csvContent = headers.join(',') + '\n';
-        rows.forEach(r => { csvContent += r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',') + '\n'; });
-        const dateStr = (date || todayStr()).replace(/-/g, '');
-        const fileName = `监管日报_${dateStr}_${rows.length}条`;
-        const filterDisplay = Object.entries(f).map(([k, v]) => `${k}=${v}`).join('，') || '近7日全部';
-        downloadCSV(csvContent, fileName);
-        get().addExportRecord({ type: 'daily_report', typeName: TYPE_NAMES['daily_report'], filters: f, filterDisplay, fileName: fileName + '.csv', recordCount: rows.length, operator: get().currentOperator });
+        const dateStr = (filters['日期'] || todayStr()).replace(/-/g, '');
+        const fileName = `监管日报_${dateStr}_${data.length}条`;
+        downloadCSV(fileName, headers, data);
+        get().addExportRecord({ type: 'daily_report', typeName: TYPE_NAMES['daily_report'], filters, filterDisplay, fileName: fileName + '.csv', recordCount: data.length, operator: get().currentOperator });
         return fileName;
       },
 

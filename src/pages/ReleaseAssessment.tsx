@@ -30,6 +30,7 @@ const ReleaseAssessment: React.FC = () => {
   const checkins = useAppStore(s => s.checkins);
   const leaves = useAppStore(s => s.leaves);
   const exportReleaseToCSV = useAppStore(s => s.exportReleaseToCSV);
+  const exportReleaseListCSV = useAppStore(s => s.exportReleaseListCSV);
   const exportRecords = useAppStore(s => s.exportRecords);
 
   const [activeTab, setActiveTab] = useState<ReleaseTab>('list');
@@ -92,7 +93,11 @@ const ReleaseAssessment: React.FC = () => {
   };
 
   const doExport = () => {
-    exportReleaseToCSV(startDate, endDate, filterDistrict || undefined, keyword || undefined);
+    const f: Record<string, string> = { '开始日期': startDate, '结束日期': endDate };
+    if (filterDistrict) f['区县'] = filterDistrict;
+    if (keyword) f['关键词'] = keyword;
+    const filterDisplay = Object.entries(f).map(([k, v]) => `${k}=${v}`).join('，');
+    exportReleaseListCSV(releaseList, f, filterDisplay);
   };
 
   const filteredExportRecords = useMemo(() => {

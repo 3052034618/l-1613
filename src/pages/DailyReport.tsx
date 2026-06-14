@@ -30,6 +30,7 @@ const DailyReport: React.FC = () => {
   const subjects = useAppStore(s => s.subjects);
   const alerts = useAppStore(s => s.alerts);
   const exportReportsToCSV = useAppStore(s => s.exportReportsToCSV);
+  const exportDailyReportsCSV = useAppStore(s => s.exportDailyReportsCSV);
   const exportRecords = useAppStore(s => s.exportRecords);
 
   const [activeTab, setActiveTab] = useState<DailyReportTab>('overview');
@@ -107,38 +108,42 @@ const DailyReport: React.FC = () => {
   const PIE_COLORS = ['#2563eb', '#16a34a', '#ca8a04', '#dc2626', '#7c3aed', '#0891b2'];
 
   const doExport = () => {
-    exportReportsToCSV(reportDate, filterDistrict);
+    const f: Record<string, string> = {};
+    if (reportDate) f['日期'] = reportDate;
+    if (filterDistrict) f['区县'] = filterDistrict;
+    const filterDisplay = Object.entries(f).map(([k, v]) => `${k}=${v}`).join('，') || '当日全部';
+    exportDailyReportsCSV(currentData, f, filterDisplay);
   };
 
   const exportAll = () => {
-    let csv = '日期,区县,在矫人数,违规率(%),教育完成率(%),逾期报到数,预警数,状态评估\n';
-    let totalRows = 0;
+    const allRows: any[] = [];
     for (const d of dateList) {
-      const data = reports.filter(r => r.date === d && (!filterDistrict || r.district === filterDistrict));
-      const list = data.length > 0 ? data : currentData.map(r => ({ ...r, date: d }));
-      list.forEach(r => {
-        const score = r.violationRate + r.overdueCheckinCount * 0.5 + r.alertCount;
-        const assess = score < 2 ? '良好' : score < 4 ? '一般' : '重点关注';
-        csv += `${r.date},${r.district},${r.activeCount},${r.violationRate},${r.studyCompletionRate},${r.overdueCheckinCount},${r.alertCount},${assess}\n`;
-        totalRows++;
-      });
+      const existing = reports.filter(r => r.date === d && (!filterDistrict || r.district === filterDistrict));
+      if (existing.length > 0) {
+        allRows.push(...existing);
+      } else {
+        const districts = filterDistrict ? [filterDistrict] : DISTRICTS;
+        districts.forEach(dist => {
+          const activeSubjects = subjects.filter(s => s.district === dist && s.status === 'active');
+          const activeCount = activeSubjects.length;
+          const districtAlerts = alerts.filter(a => a.district === dist);
+          const dayAlerts = districtAlerts.filter(a => a.createdAt.slice(0, 10) === d);
+          allRows.push({
+            date: d,
+            district: dist,
+            activeCount,
+            violationRate: activeCount > 0 ? Number(((dayAlerts.length / Math.max(1, activeCount)) * 100).toFixed(2)) : 0,
+            studyCompletionRate: Number((75 + Math.random() * 23).toFixed(1)),
+            overdueCheckinCount: Math.max(0, Math.floor(activeCount * 0.05)),
+            alertCount: dayAlerts.length,
+          });
+        });
+      }
     }
-    const dateStr = todayStr().replace(/-/g, '');
-    const fileName = `监管日报_近7天${filterDistrict ? '_' + filterDistrict : ''}_${totalRows}条`;
-    downloadCSV(csv, fileName);
-    const addExportRecord = useAppStore.getState().addExportRecord;
     const f: Record<string, string> = { '日期范围': '近7日' };
     if (filterDistrict) f['区县'] = filterDistrict;
     const filterDisplay = Object.entries(f).map(([k, v]) => `${k}=${v}`).join('，');
-    addExportRecord({
-      type: 'daily_report',
-      typeName: '监管日报',
-      filters: f,
-      filterDisplay,
-      fileName: fileName + '.csv',
-      recordCount: totalRows,
-      operator: useAppStore.getState().currentOperator,
-    });
+    exportDailyReportsCSV(allRows, f, filterDisplay);
   };
 
   const filteredExportRecords = useMemo(() => {
